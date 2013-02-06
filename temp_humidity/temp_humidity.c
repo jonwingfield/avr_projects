@@ -4,7 +4,6 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <stdbool.h>
-// #include <math.h>
 #include "dbg.h"
 #include "lcd.h"
 
@@ -13,6 +12,7 @@
 
 #define sbi(var, mask)   ((var) |= (uint8_t)(1 << mask))
 #define cbi(var, mask)   ((var) &= (uint8_t)~(1 << mask))
+#define round(fp) (int)((fp) >= 0 ? (fp) + 0.5 : (fp) - 0.5)
 
 //Define functions
 //======================
@@ -26,28 +26,27 @@ uint16_t last_timer = 0;
 bool reading = false;
 
 /*
-    C = t / ( R * ln(Vh / Vl) )
 
-    t = ticks / 16  (in units of us)
+    Vc = Vs(1 - e ^ (-t/RC))
 
-    R = 1 MΩ
+    C = t / (ln(1 - Vc/Vs) * R)
 
-    C = t / ln_vdiff
 */
 
-#define turn_on_cap()     sbi(PORTC, PC0)
-#define turn_off_cap()    cbi(PORTC, PC0)
+#define turn_on_cap()     sbi(PORTD, PD2)
+#define turn_off_cap()    cbi(PORTD, PD2)
 
-#define CAP_AT_55   3535
+#define CAP_AT_55   3364
+#define PF_PER_PERCENT_HUMIDITY  0.65
 #define VRATIO  0.82456140350877    // 1 - (v_cap / v_source), defined by the voltage 
                                     // divider circuit (in this case 470 ohms / 100 ohms) 
-#define LN_V1_V2 0.26469255422708   // ln (1 / VRATIO)
-#define LN_TIMES_CYCLES LN_V1_V2 * 1.6 // 4.01635913243566 / 2.0  // LN_V1_V2 * 1.6   (divide by 10 to convert to )
+#define LN_V1_V2 0.693147180559945 // 0.26469255422708   // ln (1 / VRATIO)  0.693147180559945 @ .5 of Vs
+#define LN_TIMES_CYCLES LN_V1_V2 * 1.6  // this is actually in .1pF units (for convenience)
 #define CYCLES_TO_USEC  ((double)FOSC / 1000000.0)
 
 // const double ln_vdiff = 1 - (log(V1 * V2));
 
-// returns capacitance in pF * 10 (10^-13)
+// returns capacitance in pF * 10 (10^-13F) (for precision)
 uint16_t calc_capacitance(uint16_t ticks)
 {
     // printf("%u ticks\n", ticks);
@@ -55,16 +54,25 @@ uint16_t calc_capacitance(uint16_t ticks)
     // return (uint16_t)((double)ticks / (1.6 * .98));
 }
 
-uint16_t calc_humidity(uint16_t pf)
+// returns humidity in %RH * 10 (for precision)
+uint16_t calc_humidity(double pf_times_10, 
+    uint16_t temp_c_times_10)
 {
-    int diff = ((int)pf - CAP_AT_55) / 6;
-    printf("diff %d\n", diff);
-    return 55 + (uint16_t)diff;
+    // numbers are calculated at 
+    double temp_adjust = 4.0 - (double)temp_c_times_10 * .016;
+
+    double diff = (pf_times_10 - CAP_AT_55) / (PF_PER_PERCENT_HUMIDITY * 10.0);  
+    return (uint16_t)(((55 + diff) + temp_adjust) * 10);
 }
 
 #define NUM_READINGS 8
+#define NUM_TO_AVG   8
 uint16_t readings[NUM_READINGS] = { 0 };
 uint8_t reading_num = 0;
+uint8_t display_num = 0;
+uint16_t displays[NUM_TO_AVG] = { 0 };
+
+uint16_t last_ticks = 0;
 
 ISR(ANALOG_COMP_vect)
 {
@@ -82,6 +90,9 @@ ISR(ANALOG_COMP_vect)
         reading_num = 0;
     }
 
+    printf("%u ticks\n", ticks);
+    last_ticks = ticks;
+
     reading = false;
 }
 
@@ -91,9 +102,61 @@ ISR(BADISR_vect)
     printf("badisr\n");
 }
 
-ISR(TIMER1_CAPT_vect)
+#define ADC_STEPS_PER_VOLT 919.9
+#define TEMPS_TO_AVG   8
+uint8_t temp_reading_num = 0;
+uint16_t temps[TEMPS_TO_AVG] = { 0 };
+
+uint16_t calc_temp()
 {
-    // shouldn't trigger
+    // measure temp
+    cbi(PRR, PRADC);
+    ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // set prescaler to 128 (16Mhz / 128 = 125Khz)
+    // ADMUX |= (1 << REFS0);
+    ADMUX &= 0; // set ADC1
+    ADMUX |= 0b001;
+    ADMUX |= (1 << REFS1) | (1 << REFS0);   // use internal 1.1v reference
+    cbi(ACSR, ACIE); 
+    sbi(ADCSRA, ADEN); // turn on ADC
+    sbi(ADCSRA, ADSC); // start conversion
+
+    int max = 0;
+    uint16_t result = 0;
+    while (!(ADCSRA & ADIF) && (++max < 500)) { _delay_ms(1); }
+    if (max >= 500) printf("Failed\n");
+    else {
+        result |= ADCL;
+        result |= (ADCH & 3) << 8;
+        printf("Temp conversion result %u\n", result);
+    }
+
+    ADMUX &= 0; // set ADC4 as analog compare negative input
+    ADMUX |= 0b100;
+    sbi(ACSR, ACIE);
+    cbi(ADCSRA, ADEN); // turn off ADC
+
+    if (result == 0) return result;
+
+    double temp = (double)result / ADC_STEPS_PER_VOLT;
+    // factory is .6V, I added X V (XC) to SUBTRACT XC to calibrate based on my sensors
+    temp -= 0.605;
+    temp /= 0.01;
+
+    uint16_t temp_int = (uint16_t)(temp * 10);
+
+    printf("This temp: %u.%u\n", temp_int / 10, temp_int % 10);
+
+    temps[temp_reading_num] = temp_int;
+    if (++temp_reading_num >= TEMPS_TO_AVG) temp_reading_num = 0;
+
+    int i = 0;
+    uint16_t temp_avg = 0;
+    for (i = 0; i < TEMPS_TO_AVG && temps[i]; ++i)
+    {
+        temp_avg += temps[i];
+    }
+
+    return (temp_avg / i);
 }
 
 //======================
@@ -105,8 +168,6 @@ int main (void)
     DDRD |= 1 << PD4;
     // PORTD |= 1 << PD4;
 
-    // init_lcd();
-    // lcd_print("CapMeter!", 1);
     printf("Capmeter initialized\n");
 
     OCR2A  = 0x00;
@@ -123,11 +184,14 @@ int main (void)
     ACSR |= 1 << ACIE;
     ADMUX |= 0b100; // set ADC4 as analog compare negative input
 
-    DDRC |= (1 << PC0); // pinout to start measuring
+    DDRD |= (1 << PD2); // pinout to start measuring
     DDRC &= ~(1 << PC1);
     turn_off_cap();
 
     _delay_ms(1000);
+
+    init_lcd();
+    lcd_print("Temp & Humidity!", 1);
 
     sei();
 
@@ -149,35 +213,48 @@ int main (void)
                 // let it discharge
                 _delay_ms(10);
             }
+
+            uint16_t temp = calc_temp();
             
             uint16_t avg_reading = 0;
             for (int i=0; i<NUM_READINGS; i++) avg_reading += readings[i];
-            avg_reading /= NUM_READINGS;
+            double avg_double = (double)avg_reading / (NUM_READINGS * 2);
+            // avg_reading /= NUM_READINGS * 2;
 
-            // measure temp
+            printf("averages: %f %u\n", avg_double, avg_reading);
 
-                cbi(PRR, PRADC);
-                sbi(ADCSRA, ADEN); // turn on ADC
-                cbi(ACSR, ACIE); 
-                ADCSRA |= 0b111; // set prescaler to 128 (16Mhz / 128 = 125Khz)
-                ADMUX &= 0b000; // set ADC1
-                ADMUX |= 0b001;
+            uint16_t humidity = calc_humidity(avg_double, temp);
 
-                sbi(ADCSRA, ADSC); // start conversion
+            displays[display_num] = humidity;
+            if (++display_num >= NUM_TO_AVG) display_num = 0;
 
-                while (ADCSRA & ADSC) { printf("waiting...\n"); _delay_ms(1); }
+            uint16_t avg_display = 0;
+            int i = 0;
+            for (i=0; i<NUM_TO_AVG && displays[i]; i++) {
+                avg_display += displays[i];
+            } 
+            avg_display /= i;
 
-                printf("Temp conversion result %u\n", ADC);
+            uint16_t temp_f = 9.0/5.0 * (double)temp + 320.0;
 
-                ADMUX &= 0b000; // set ADC4 as analog compare negative input
-                ADMUX |= 0b100;
-                sbi(ACSR, ACIE);
-                cbi(ADCSRA, ADEN); // turn off ADC
+            char lcd_buf[17];
+            snprintf(lcd_buf, 16, "%u.%uC %u.%uF", 
+                temp / 10, temp % 10,
+                temp_f / 10, temp_f % 10);
+
+            char cap_info[17] = { '\0' };
+            sprintf(cap_info, "%u.%u%%   (%u.%u)", 
+                avg_display / 10, avg_display % 10,
+                (uint16_t)avg_double / 10, (uint16_t)avg_double % 10);
+            lcd_print(cap_info, 1);
 
 
-            printf("avg: %upF %u%% Humidity\n", avg_reading, calc_humidity(avg_reading));
-
-
+            lcd_print(lcd_buf, 2);
+            printf("avg: %upF %u.%u%% Humidity (last reading: %u.%u%%) Temp: %u.%u\n", 
+                avg_reading, 
+                avg_display / 10, avg_display % 10,
+                humidity / 10, humidity % 10,
+                temp / 10, temp % 10);
 
             _delay_ms(3000);
         }

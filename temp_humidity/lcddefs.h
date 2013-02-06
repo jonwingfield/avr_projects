@@ -7,20 +7,20 @@
 #define sleep(n)  usleep(n* 1000000)
 
 #define SET_OUTP(g, i)   \
-	if ((g) != PD4) { \
-		if (i) { PORTC |= (1 << (g)); } \
-		else { PORTC &= ~(1 << (g)); } \
+	if ((g) < 3) { \
+		if (i) { PORTB |= (1 << (g)); } \
+		else { PORTB &= ~(1 << (g)); } \
 	} else { \
-		if (i) { PORTD |= (1 << (g)); } \
-		else { PORTD &= ~(1 << (g)); } \		
+		if (i) { PORTC |= (1 << ((g)-4)); } \
+		else { PORTC &= ~(1 << ((g)-4)); } \
 	}
-#define SETUP_OUT_PIN(g)  if ((g) != PD4) { DDRC |= 1 << (g); } else { DDRD |= 1 << (g); }
+#define SETUP_OUT_PIN(g)  if ((g) < DB6) { DDRB |= 1 << (g); } else { DDRC |= 1 << ((g)-4); }
 
-#define DB4 PC0   
-#define DB5	PC1
-#define DB6	PC2
-#define DB7	PC3
-#define RS	PC5
-#define E	PD4
+#define DB4 4   // PC0
+#define DB5	2   // PB2
+#define DB6	6   // PC2
+#define DB7	7   // PC3
+#define RS	0   // PB0
+#define E	1   // PB1
 
 #endif
