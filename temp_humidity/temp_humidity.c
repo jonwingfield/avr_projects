@@ -36,7 +36,7 @@ bool reading = false;
 #define turn_on_cap()     sbi(PORTD, PD2)
 #define turn_off_cap()    cbi(PORTD, PD2)
 
-#define CAP_AT_55   3364
+#define CAP_AT_55   3376
 #define PF_PER_PERCENT_HUMIDITY  0.65
 #define VRATIO  0.82456140350877    // 1 - (v_cap / v_source), defined by the voltage 
                                     // divider circuit (in this case 470 ohms / 100 ohms) 
@@ -55,14 +55,27 @@ uint16_t calc_capacitance(uint16_t ticks)
 }
 
 // returns humidity in %RH * 10 (for precision)
-uint16_t calc_humidity(double pf_times_10, 
-    uint16_t temp_c_times_10)
+uint16_t calc_humidity(double pf_times_10, uint16_t temp_c_times_10)
 {
     // numbers are calculated at 
     double temp_adjust = 4.0 - (double)temp_c_times_10 * .016;
 
     double diff = (pf_times_10 - CAP_AT_55) / (PF_PER_PERCENT_HUMIDITY * 10.0);  
     return (uint16_t)(((55 + diff) + temp_adjust) * 10);
+}
+
+// calculate dewpoint using the Magnus Approximation
+#define DEWPOINT_CONST_B  17.67
+#define DEWPOINT_CONST_C  243.5
+uint16_t calc_dewpoint(uint16_t humidity_times_10, uint16_t temp_c_times_10)
+{
+    double temp = (double)temp_c_times_10 / 10.0;
+    double humidity = (double)humidity_times_10 / 10.0;
+    double gamma_t_rh = log(humidity / 100.0) + 
+        ((DEWPOINT_CONST_B * temp) / (DEWPOINT_CONST_C + temp));
+
+    double dewpoint = (DEWPOINT_CONST_C * gamma_t_rh) / (DEWPOINT_CONST_B - gamma_t_rh);
+    return (uint16_t)(dewpoint * 10.0);
 }
 
 #define NUM_READINGS 8
@@ -90,7 +103,7 @@ ISR(ANALOG_COMP_vect)
         reading_num = 0;
     }
 
-    printf("%u ticks\n", ticks);
+    debug("%u ticks", ticks);
     last_ticks = ticks;
 
     reading = false;
@@ -98,9 +111,10 @@ ISR(ANALOG_COMP_vect)
 
 ISR(BADISR_vect)
 {
-    lcd_print("badisr", 2);
-    printf("badisr\n");
+    debug("badisr");
 }
+
+#define c_to_f(temp)   (9.0 / 5.0 * (double)(temp) + 320.0)
 
 #define ADC_STEPS_PER_VOLT 919.9
 #define TEMPS_TO_AVG   8
@@ -123,11 +137,11 @@ uint16_t calc_temp()
     int max = 0;
     uint16_t result = 0;
     while (!(ADCSRA & ADIF) && (++max < 500)) { _delay_ms(1); }
-    if (max >= 500) printf("Failed\n");
+    if (max >= 500) debug("Failed");
     else {
         result |= ADCL;
         result |= (ADCH & 3) << 8;
-        printf("Temp conversion result %u\n", result);
+        debug("Temp conversion result %u", result);
     }
 
     ADMUX &= 0; // set ADC4 as analog compare negative input
@@ -144,7 +158,7 @@ uint16_t calc_temp()
 
     uint16_t temp_int = (uint16_t)(temp * 10);
 
-    printf("This temp: %u.%u\n", temp_int / 10, temp_int % 10);
+    debug("This temp: %u.%u", temp_int / 10, temp_int % 10);
 
     temps[temp_reading_num] = temp_int;
     if (++temp_reading_num >= TEMPS_TO_AVG) temp_reading_num = 0;
@@ -168,13 +182,11 @@ int main (void)
     DDRD |= 1 << PD4;
     // PORTD |= 1 << PD4;
 
-    printf("Capmeter initialized\n");
+    debug("Capmeter initialized");
 
     OCR2A  = 0x00;
     TCCR2A = 0b10000011;
     TCCR2B = 0b00000001;
-
-    double delta_t = 0.0;
 
     cbi(ADCSRA, ADEN); // turn off ADC
 
@@ -221,8 +233,6 @@ int main (void)
             double avg_double = (double)avg_reading / (NUM_READINGS * 2);
             // avg_reading /= NUM_READINGS * 2;
 
-            printf("averages: %f %u\n", avg_double, avg_reading);
-
             uint16_t humidity = calc_humidity(avg_double, temp);
 
             displays[display_num] = humidity;
@@ -235,22 +245,23 @@ int main (void)
             } 
             avg_display /= i;
 
-            uint16_t temp_f = 9.0/5.0 * (double)temp + 320.0;
+            uint16_t temp_f = c_to_f(temp);
+            uint16_t dewpoint_f = c_to_f(calc_dewpoint((uint16_t)avg_display, temp));
 
             char lcd_buf[17];
-            snprintf(lcd_buf, 16, "%u.%uC %u.%uF", 
+            snprintf(lcd_buf, 17, "%u.%uC %u.%uF", 
                 temp / 10, temp % 10,
                 temp_f / 10, temp_f % 10);
 
             char cap_info[17] = { '\0' };
-            sprintf(cap_info, "%u.%u%%   (%u.%u)", 
+            snprintf(cap_info, 17, "%u.%u%% DP %u.%uF   ", 
                 avg_display / 10, avg_display % 10,
-                (uint16_t)avg_double / 10, (uint16_t)avg_double % 10);
+                dewpoint_f / 10, dewpoint_f % 10);
+                //(uint16_t)avg_double / 10, (uint16_t)avg_double % 10);
             lcd_print(cap_info, 1);
-
-
             lcd_print(lcd_buf, 2);
-            printf("avg: %upF %u.%u%% Humidity (last reading: %u.%u%%) Temp: %u.%u\n", 
+
+            debug("avg: %upF %u.%u%% Humidity (last reading: %u.%u%%) Temp: %u.%u", 
                 avg_reading, 
                 avg_display / 10, avg_display % 10,
                 humidity / 10, humidity % 10,
