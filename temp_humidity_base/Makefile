@@ -40,7 +40,7 @@
 
 
 # MCU name
-MCU = atmega328p
+MCU = atmega168
 
 
 # Processor frequency.
@@ -48,7 +48,7 @@ MCU = atmega328p
 #     processor frequency. You can then use this symbol in your source code to 
 #     calculate timings. Do NOT tack on a 'UL' at the end, this will be done
 #     automatically to create a 32-bit value in your source code.
-F_CPU = 16000000
+F_CPU = 8000000
 
 
 # Output format. (can be srec, ihex, binary)
@@ -56,11 +56,11 @@ FORMAT = ihex
 
 
 # Target file name (without extension).
-TARGET = temp_humidity
+TARGET = temp_humidity_base
 
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = $(TARGET).c lcd.c VirtualWire/VirtualWire.c
+SRC = $(TARGET).c VirtualWire/VirtualWire.c
 
 
 # List Assembler source files here.
@@ -146,8 +146,8 @@ PRINTF_LIB_FLOAT = -Wl,-u,vfprintf -lprintf_flt
 
 # If this is left blank, then it will use the Standard printf version.
 # PRINTF_LIB = 
-PRINTF_LIB = $(PRINTF_LIB_MIN)
-# PRINTF_LIB = $(PRINTF_LIB_FLOAT)
+# PRINTF_LIB = $(PRINTF_LIB_MIN)
+PRINTF_LIB = $(PRINTF_LIB_FLOAT)
 
 
 # Minimalistic scanf version
@@ -222,7 +222,7 @@ AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 # to submit bug reports.
 # AVRDUDE_VERBOSE = -v -v
 
-AVRDUDE_FLAGS = -p $(MCU) -c $(AVRDUDE_PROGRAMMER) -B 1
+AVRDUDE_FLAGS = -p $(MCU) -c $(AVRDUDE_PROGRAMMER) -B 1 -F
 AVRDUDE_FLAGS += $(AVRDUDE_NO_VERIFY)
 AVRDUDE_FLAGS += $(AVRDUDE_VERBOSE)
 AVRDUDE_FLAGS += $(AVRDUDE_ERASE_COUNTER)
@@ -318,7 +318,7 @@ ALL_ASFLAGS = -mmcu=$(MCU) -I. -x assembler-with-cpp $(ASFLAGS)
 # Default target.
 all: begin gccversion sizebefore build sizeafter end
 
-build: lcd.o elf hex eep lss sym
+build: VirtualWire/VirtualWire.o elf hex eep lss sym
 
 elf: $(TARGET).elf
 hex: $(TARGET).hex

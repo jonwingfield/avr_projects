@@ -3,7 +3,7 @@
 
 // see lcddefs.h for needed defines
 
-void init_lcd(void);
+void init_lcd();
 void lcd_print(char* c, short line);
 
 #endif

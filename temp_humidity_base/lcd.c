@@ -5,14 +5,15 @@
 void write_output(char i)
 {
 	i >>= 4;
-	// debug("writing %x", i);
+	debug("writing %x", i);
 	SET_OUTP(DB4, (i & 1));
 	SET_OUTP(DB5, (i & 2));
 	SET_OUTP(DB6, (i & 4));
 	SET_OUTP(DB7, (i & 8));
+	//sleep(3);
 }
 
-void nybble(void)
+void nybble()
 {
 	SET_OUTP(E, 1);
 	usleep(1000);
@@ -21,7 +22,7 @@ void nybble(void)
 
 void command(char i)
 {
-	// debug("command 0x%x", i);
+	debug("command 0x%x", i);
 	SET_OUTP(RS, 0);
 	write_output(i);
 	nybble();
@@ -32,7 +33,7 @@ void command(char i)
 
 void lcd_write(char i)
 {
-	// debug("writing character %c", i);
+	debug("writing character %c", i);
 	SET_OUTP(RS, 1);
 	write_output(i);
 	nybble();
@@ -50,7 +51,7 @@ void lcd_print(char* str, short line)
 	}
 }
 
-void init_lcd(void)
+void init_lcd()
 {
 	SETUP_OUT_PIN(DB4);
 	SETUP_OUT_PIN(DB5);

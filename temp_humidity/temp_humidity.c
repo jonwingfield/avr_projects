@@ -4,8 +4,10 @@
 #include <avr/interrupt.h>
 #include <util/delay.h>
 #include <stdbool.h>
+#include <VirtualWire/VirtualWire.h>
 #include "dbg.h"
 #include "lcd.h"
+#include "weather_info.h"
 
 #define BAUD 9600
 #define MYUBRR (F_CPU/16/(BAUD-1))
@@ -13,6 +15,8 @@
 #define sbi(var, mask)   ((var) |= (uint8_t)(1 << mask))
 #define cbi(var, mask)   ((var) &= (uint8_t)~(1 << mask))
 #define round(fp) (int)((fp) >= 0 ? (fp) + 0.5 : (fp) - 0.5)
+
+#define c_to_f(temp)   (9.0 / 5.0 * (double)(temp) + 320.0)
 
 //Define functions
 //======================
@@ -114,14 +118,12 @@ ISR(BADISR_vect)
     debug("badisr");
 }
 
-#define c_to_f(temp)   (9.0 / 5.0 * (double)(temp) + 320.0)
-
 #define ADC_STEPS_PER_VOLT 919.9
 #define TEMPS_TO_AVG   8
 uint8_t temp_reading_num = 0;
 uint16_t temps[TEMPS_TO_AVG] = { 0 };
 
-uint16_t calc_temp()
+uint16_t calc_temp(void)
 {
     // measure temp
     cbi(PRR, PRADC);
@@ -142,6 +144,7 @@ uint16_t calc_temp()
         result |= ADCL;
         result |= (ADCH & 3) << 8;
         debug("Temp conversion result %u", result);
+        _delay_ms(1);  // I don't know why this is needed, but itz
     }
 
     ADMUX &= 0; // set ADC4 as analog compare negative input
@@ -202,10 +205,14 @@ int main (void)
 
     _delay_ms(1000);
 
+    vw_setup(2000);
+
     init_lcd();
     lcd_print("Temp & Humidity!", 1);
 
     sei();
+
+    uint8_t num_readings_then_send = 0;
 
     while (1) {
         _delay_ms(1000);
@@ -231,7 +238,6 @@ int main (void)
             uint16_t avg_reading = 0;
             for (int i=0; i<NUM_READINGS; i++) avg_reading += readings[i];
             double avg_double = (double)avg_reading / (NUM_READINGS * 2);
-            // avg_reading /= NUM_READINGS * 2;
 
             uint16_t humidity = calc_humidity(avg_double, temp);
 
@@ -266,6 +272,22 @@ int main (void)
                 avg_display / 10, avg_display % 10,
                 humidity / 10, humidity % 10,
                 temp / 10, temp % 10);
+
+            // transmit the readings every few times
+            if (num_readings_then_send == 0) {
+                weather_info winfo = {
+                    .sensor_id = 1,
+                    .temperature_times_10 = temp,
+                    .humidity_times_10 = avg_display
+                };
+                sbi(PORTD, PD4);
+                vw_send((uint8_t*)&winfo, sizeof(weather_info));             
+                vw_wait_tx();
+                cbi(PORTD, PD4);
+            }
+            if (++num_readings_then_send >= 3) {
+                num_readings_then_send = 0;
+            }
 
             _delay_ms(3000);
         }
