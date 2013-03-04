@@ -8,12 +8,13 @@
 */
 
 #include <stdio.h>
+#include <string.h>
+#include <stdbool.h>
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include "VirtualWire/VirtualWire.h"
+#include <avr/wdt.h>
 #include <util/delay.h>
-#include <stdbool.h>
-#include <string.h>
+#include "VirtualWire/VirtualWire.h"
 #include "dbg.h"
 #include "weather_info.h"
 
@@ -25,13 +26,16 @@
 
 #define c_to_f(temp)   (uint16_t)(9.0 / 5.0 * (double)(temp) + 320.0)
 
+#define MAX_SAME_READINGS 10
+
 //Define functions
 //======================
 void ioinit(void);      // initializes IO
 static int uart_putchar(char c, FILE *stream);
 uint8_t uart_getchar(void);
+void reset(void);
 
-uint16_t calc_dewpoint(uint16_t humidity_times_10, uint16_t temp_c_times_10);
+bool is_repeat_reading_bug(weather_info* winfo);
 static FILE mystdout = FDEV_SETUP_STREAM(uart_putchar, NULL, _FDEV_SETUP_WRITE);
 
 ISR(BADISR_vect)
@@ -63,26 +67,21 @@ int main (void)
         if (vw_get_message((uint8_t*)msg, &msglen)) {
             weather_info* winfo = (weather_info*)msg;
 
-            printf("Reading from sensor %d------------------\n", winfo->sensor_id);
-            printf("Temp: %u.%uF %u.%uC\n",
-                c_to_f(winfo->temperature_times_10) / 10,
-                c_to_f(winfo->temperature_times_10) % 10,
+            if (is_repeat_reading_bug(winfo)) {
+                printf("Too many duplicate readings, resetting\n");
+                reset();
+            }
+
+            printf("Sensor Id: %d, Temperature: %u.%u, Humidity: %u.%u%%\n", 
+                winfo->sensor_id,
                 winfo->temperature_times_10 / 10,
-                winfo->temperature_times_10 % 10);
-            printf("Humidity: %u.%u%%\n",
+                winfo->temperature_times_10 % 10,
                 winfo->humidity_times_10 / 10,
                 winfo->humidity_times_10 % 10);
-
-            uint16_t dewpoint = calc_dewpoint(winfo->humidity_times_10, 
-                winfo->temperature_times_10);
-
-            printf("Dewpoint: %u.%uF %u.%uC\n",
-                c_to_f(dewpoint) / 10,
-                c_to_f(dewpoint) % 10,
-                dewpoint / 10,
-                dewpoint % 10);
         } 
 
+        memset(msg, 0, VW_MAX_MESSAGE_LEN+1);
+        msglen = VW_MAX_MESSAGE_LEN;
         _delay_ms(100);
     }
 
@@ -121,17 +120,30 @@ uint8_t uart_getchar(void)
     return(UDR0);
 }
 
-// calculate dewpoint using the Magnus Approximation
-#define DEWPOINT_CONST_B  17.67
-#define DEWPOINT_CONST_C  243.5
-uint16_t calc_dewpoint(uint16_t humidity_times_10, uint16_t temp_c_times_10)
+bool is_repeat_reading_bug(weather_info* winfo)
 {
-    double temp = (double)temp_c_times_10 / 10.0;
-    double humidity = (double)humidity_times_10 / 10.0;
-    double gamma_t_rh = log(humidity / 100.0) + 
-        ((DEWPOINT_CONST_B * temp) / (DEWPOINT_CONST_C + temp));
+    static uint8_t same_temp = 0;
+    static uint8_t same_humidity = 0;
+    static weather_info last_winfo = { .temperature_times_10 = 0, .humidity_times_10 = 0 };
 
-    double dewpoint = (DEWPOINT_CONST_C * gamma_t_rh) / (DEWPOINT_CONST_B - gamma_t_rh);
-    return (uint16_t)(dewpoint * 10.0);
+    if (winfo->temperature_times_10 == last_winfo.temperature_times_10) same_temp++;
+    else same_temp = 0;
+    if (winfo->humidity_times_10 == last_winfo.humidity_times_10) same_humidity++;
+    else same_humidity = 0;
+
+    last_winfo = *winfo;
+
+    if (same_temp > MAX_SAME_READINGS || same_humidity > MAX_SAME_READINGS) {
+        return true;
+    }
+
+    return false;
+}
+
+void reset(void)
+{
+  wdt_disable();  
+  wdt_enable(WDTO_15MS);
+  while (1) {}
 }
 
