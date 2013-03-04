@@ -8,6 +8,7 @@
 #include "dbg.h"
 #include "lcd.h"
 #include "weather_info.h"
+#include "ds18b20.h"
 
 #define BAUD 9600
 #define MYUBRR (F_CPU/16/(BAUD-1))
@@ -41,7 +42,7 @@ bool reading = false;
 #define turn_off_cap()    cbi(PORTD, PD2)
 
 #define CAP_AT_55   3376
-#define PF_PER_PERCENT_HUMIDITY  0.65
+#define PF_PER_PERCENT_HUMIDITY  0.60
 #define VRATIO  0.82456140350877    // 1 - (v_cap / v_source), defined by the voltage 
                                     // divider circuit (in this case 470 ohms / 100 ohms) 
 #define LN_V1_V2 0.693147180559945 // 0.26469255422708   // ln (1 / VRATIO)  0.693147180559945 @ .5 of Vs
@@ -58,14 +59,20 @@ uint16_t calc_capacitance(uint16_t ticks)
     // return (uint16_t)((double)ticks / (1.6 * .98));
 }
 
+#define PERCENT_HUMIDITY_PER_DEG_C  2.7
+
 // returns humidity in %RH * 10 (for precision)
 uint16_t calc_humidity(double pf_times_10, uint16_t temp_c_times_10)
 {
-    // numbers are calculated at 
-    double temp_adjust = 4.0 - (double)temp_c_times_10 * .016;
+    double temp_per_pf = 
+        PERCENT_HUMIDITY_PER_DEG_C * PF_PER_PERCENT_HUMIDITY; // 1.74
+
+    int16_t temp_adjust = (int16_t)((double)(temp_c_times_10 - 250.0) * temp_per_pf);
+    if (temp_adjust > 0) 
+        pf_times_10 += temp_adjust;
 
     double diff = (pf_times_10 - CAP_AT_55) / (PF_PER_PERCENT_HUMIDITY * 10.0);  
-    return (uint16_t)(((55 + diff) + temp_adjust) * 10);
+    return (uint16_t)((55 + diff) * 10);
 }
 
 // calculate dewpoint using the Magnus Approximation
@@ -118,7 +125,7 @@ ISR(BADISR_vect)
     debug("badisr");
 }
 
-#define ADC_STEPS_PER_VOLT 919.9
+#define ADC_STEPS_PER_VOLT 930.9 // was 919.9
 #define TEMPS_TO_AVG   8
 uint8_t temp_reading_num = 0;
 uint16_t temps[TEMPS_TO_AVG] = { 0 };
@@ -155,8 +162,8 @@ uint16_t calc_temp(void)
     if (result == 0) return result;
 
     double temp = (double)result / ADC_STEPS_PER_VOLT;
-    // factory is .6V, I added X V (XC) to SUBTRACT XC to calibrate based on my sensors
-    temp -= 0.605;
+    // factory is .6V @ 0degC, 10mV / degC
+    temp -= 0.6;
     temp /= 0.01;
 
     uint16_t temp_int = (uint16_t)(temp * 10);
@@ -173,7 +180,16 @@ uint16_t calc_temp(void)
         temp_avg += temps[i];
     }
 
-    return (temp_avg / i);
+    return temp_int;//(temp_avg / i);
+}
+
+uint16_t get_temp_ds18b20(void)
+{
+    temp_info tinfo;
+    therm_read_temp(&tinfo);
+
+    return (uint16_t)((tinfo.major * 10) + 
+        round((double)tinfo.minor / 1000));
 }
 
 //======================
@@ -212,7 +228,8 @@ int main (void)
 
     sei();
 
-    uint8_t num_readings_then_send = 0;
+    // skip the first 10 readings to let things stabalize
+    int8_t num_readings_then_send = -10;
 
     while (1) {
         _delay_ms(1000);
@@ -233,13 +250,19 @@ int main (void)
                 _delay_ms(10);
             }
 
-            uint16_t temp = calc_temp();
+            uint16_t analog_temp = calc_temp();
+            uint16_t temp = get_temp_ds18b20();
             
             uint16_t avg_reading = 0;
             for (int i=0; i<NUM_READINGS; i++) avg_reading += readings[i];
             double avg_double = (double)avg_reading / (NUM_READINGS * 2);
 
             uint16_t humidity = calc_humidity(avg_double, temp);
+
+            // sanity check values
+            // if (humidity < 10 || humidity > 1000 || temp > 500) {
+            //     continue;
+            // }
 
             displays[display_num] = humidity;
             if (++display_num >= NUM_TO_AVG) display_num = 0;
@@ -255,8 +278,9 @@ int main (void)
             uint16_t dewpoint_f = c_to_f(calc_dewpoint((uint16_t)avg_display, temp));
 
             char lcd_buf[17];
-            snprintf(lcd_buf, 17, "%u.%uC %u.%uF", 
+            snprintf(lcd_buf, 17, "%u.%u/%u.%uC %u.%uF", 
                 temp / 10, temp % 10,
+                analog_temp / 10, analog_temp % 10,
                 temp_f / 10, temp_f % 10);
 
             char cap_info[17] = { '\0' };
