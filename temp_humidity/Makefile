@@ -42,6 +42,8 @@
 # MCU name
 MCU = atmega328p
 
+# IP address of the raspberry pi to use as a programmer
+RASPBERRY_PI_ADDR = 192.168.1.103
 
 # Processor frequency.
 #     This will define a symbol, F_CPU, in all source code files equal to the 
@@ -60,7 +62,7 @@ TARGET = temp_humidity
 
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = $(TARGET).c lcd.c VirtualWire/VirtualWire.c
+SRC = $(TARGET).c lcd.c ds18b20.c VirtualWire/VirtualWire.c
 
 
 # List Assembler source files here.
@@ -107,8 +109,6 @@ CDEFS = -DF_CPU=$(F_CPU)UL -DNDEBUG
 
 # Place -I options here
 CINCS =
-
-
 
 #---------------- Compiler Options ----------------
 #  -g*:          generate debugging information
@@ -318,7 +318,7 @@ ALL_ASFLAGS = -mmcu=$(MCU) -I. -x assembler-with-cpp $(ASFLAGS)
 # Default target.
 all: begin gccversion sizebefore build sizeafter end
 
-build: lcd.o elf hex eep lss sym
+build: lcd.o ds18b20.o elf hex eep lss sym
 
 elf: $(TARGET).elf
 hex: $(TARGET).hex
@@ -363,8 +363,8 @@ gccversion :
 
 # Program the device.  
 program: $(TARGET).hex $(TARGET).eep
-	scp $(TARGET).hex pi@192.168.2.2:./avrprogram/
-	ssh pi@192.168.2.2 "cd avrprogram; sudo $(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH) $(AVRDUDE_WRITE_EEPROM)"
+	scp $(TARGET).hex pi@$(RASPBERRY_PI_ADDR):./avrprogram/
+	ssh pi@$(RASPBERRY_PI_ADDR) "cd avrprogram; sudo $(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH) $(AVRDUDE_WRITE_EEPROM)"
 
 
 # Generate avr-gdb config/init file which does the following:
