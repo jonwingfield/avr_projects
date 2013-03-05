@@ -67,11 +67,6 @@ int main (void)
         if (vw_get_message((uint8_t*)msg, &msglen)) {
             weather_info* winfo = (weather_info*)msg;
 
-            if (is_repeat_reading_bug(winfo)) {
-                printf("Too many duplicate readings, resetting\n");
-                reset();
-            }
-
             printf("Sensor Id: %d, Temperature: %u.%u, Humidity: %u.%u%%\n", 
                 winfo->sensor_id,
                 winfo->temperature_times_10 / 10,

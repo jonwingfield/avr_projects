@@ -363,8 +363,8 @@ gccversion :
 
 # Program the device.  
 program: $(TARGET).hex $(TARGET).eep
-	scp $(TARGET).hex pi@192.168.2.2:./avrprogram/
-	ssh pi@192.168.2.2 "cd avrprogram; sudo $(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH) $(AVRDUDE_WRITE_EEPROM)"
+	scp $(TARGET).hex pi@192.168.1.104:./avrprogram/
+	ssh pi@192.168.1.104 "cd avrprogram; sudo $(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH) $(AVRDUDE_WRITE_EEPROM)"
 
 
 # Generate avr-gdb config/init file which does the following:
