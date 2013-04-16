@@ -41,6 +41,11 @@ bool reading = false;
 #define turn_on_cap()     sbi(PORTD, PD2)
 #define turn_off_cap()    cbi(PORTD, PD2)
 
+#define turn_on_water()   sbi(PORTD, PD3)
+#define turn_on_water()   cbi(PORTD, PD3)
+#define NUM_WATER_ON_CYCLES  20
+#define NUM_WATER_OFF_CYCLES 200
+
 #define CAP_AT_55   3376
 #define PF_PER_PERCENT_HUMIDITY  0.60
 #define VRATIO  0.82456140350877    // 1 - (v_cap / v_source), defined by the voltage 
@@ -351,5 +356,6 @@ uint8_t uart_getchar(void)
     while( !(UCSR0A & (1<<RXC0)) && UDR0 <= 10) asm volatile("nop");
     return(UDR0);
 }
+
 
 

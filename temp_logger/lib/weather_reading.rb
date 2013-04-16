@@ -2,8 +2,24 @@ class Temperature
 	attr_reader :c, :f
 
 	def initialize(temp)
+		if temp.instance_of? String
+			if temp.end_with? 'F'
+				@f = temp.to_f
+				@c = (5.0/9.0 * temp - 32).round(1)
+				return
+			end
+		end
+		temp = temp.to_f
 		@c = temp
 		@f = (9.0/5.0 * temp + 32).round(1)
+	end
+
+	def self.from(thing)
+		if thing.instance_of? Temperature
+			thing
+		else
+			Temperature.new(thing)
+		end
 	end
 
 	def >(temp)
@@ -12,6 +28,10 @@ class Temperature
 
 	def <(temp)
 		@c < temp.c
+	end
+
+	def to_s
+		"#{@c}C"
 	end
 end
 
