@@ -3,15 +3,17 @@ class Temperature
 
 	def initialize(temp)
 		if temp.instance_of? String
-			if temp.end_with? 'F'
-				@f = temp.to_f
-				@c = (5.0/9.0 * temp - 32).round(1)
-				return
+			temp.downcase!
+			if temp.end_with? 'f'
+				from_f temp.chop
+			elsif temp.end_with? 'c'
+				from_c temp.chop
+			else
+				raise "unrecognized temperature unit in #{temp}"
 			end
+		else
+			from_c temp
 		end
-		temp = temp.to_f
-		@c = temp
-		@f = (9.0/5.0 * temp + 32).round(1)
 	end
 
 	def self.from(thing)
@@ -30,8 +32,23 @@ class Temperature
 		@c < temp.c
 	end
 
+	def ==(temp)
+		@c == temp.c
+	end
+
 	def to_s
 		"#{@c}C"
+	end
+
+private 
+	def from_f temp
+		@f = temp.to_f
+		@c = (5.0/9.0 * (@f - 32)).round(1)
+	end
+
+	def from_c temp
+		@c = temp.to_f
+		@f = (9.0/5.0 * @c + 32).round(1)		
 	end
 end
 

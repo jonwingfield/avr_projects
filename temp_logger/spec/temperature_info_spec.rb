@@ -19,13 +19,4 @@ describe WeatherReading do
 	end
 end
 
-describe 'Temperature' do
-	it 'should default to celcius for values provided' do
-		Temperature.new(22.4).c.should == 22.4
-	end
-
-	it 'should convert to farenheit' do
-		Temperature.new(25.3).f.should == 77.5
-	end
-end
 

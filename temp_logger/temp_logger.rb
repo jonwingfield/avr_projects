@@ -3,6 +3,7 @@ require 'mail'
 require 'date'
 require 'net/http'
 require './lib/weather_reading'
+require './lib/wunderground_logger'
 
 Upload_Url = "http://rtupdate.wunderground.com/weatherstation/updateweatherstation.php"
 
@@ -18,32 +19,15 @@ Mail.defaults do
 end
 
 sensor = File.new('/dev/ttyUSB0')
+logger = Wunderground_Logger.new('KFLSPRIN12', 'Wonderword11')
 
-while (line = sensor.gets) 
-	puts line
+while (output = sensor.gets) 
+	puts output
 
-	if line.start_with? 'Sensor'
-		reading = WeatherReading.from_sensor(line)
+	if output.start_with? 'Sensor'
+		reading = WeatherReading.from_sensor(output)
 
-		uri = URI(Upload_Url)
-			uri.query = URI.encode_www_form({
-			:action => 'updateraw',
-			:ID => 'KFLSPRIN12',
-			:PASSWORD => 'Wonderword11',
-			:tempf => reading.temperature.f,
-			:humidity => reading.humidity,
-			:dewptf => reading.dewpoint.f,
-			:dateutc => Time.now.utc.to_s.gsub(' UTC', ''),
-			:realtime => 1,
-			:rtfreq => 10
-		})
-
-		begin
-			res = Net::HTTP.get_response(uri)
-			puts Time.now.to_s + ": " + res.body if res.is_a?(Net::HTTPSuccess)
-		rescue
-			$stderr.print "${Time.now.to_s}: #{$!}\n"
-		end
+		logger.log(reading, Time.now)
 	end
 end
 
