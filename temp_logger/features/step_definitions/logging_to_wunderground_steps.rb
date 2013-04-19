@@ -15,12 +15,12 @@ When(/^I recieve a reading of Temperature: (.*)C, Humidity: (\d+)% from the weat
 
 	@stub_request = stub_request(:get, 
 	     'http://rtupdate.wunderground.com/weatherstation/updateweatherstation.php')
-	.with(:query => query)
-	.to_return(:body => 'success')
+		.with(:query => query)
+		.to_return(:body => 'success')
 
 	MockSensor.puts("Sensor: 1, Temperature: #{temp}C, Humidity: #{humidity}%\n\n")
 end
 
-Then(/^it should a reading of Temperature: (.*)C, Humidity: (\d+)% to Wunderground\.com$/) do |temp, humidity|
+Then(/^it should log a reading of Temperature: (.*)C, Humidity: (\d+)% to Wunderground\.com$/) do |temp, humidity|
   assert_requested @stub_request
 end
