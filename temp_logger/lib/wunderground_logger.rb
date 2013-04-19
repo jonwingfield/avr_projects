@@ -7,6 +7,7 @@ class Wunderground_Logger
 
 	def log reading, time
 		uri = URI(Upload_Url)
+
 		uri.query = URI.encode_www_form({
 			:action => 'updateraw',
 			:ID => @id,

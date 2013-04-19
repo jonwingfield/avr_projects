@@ -63,7 +63,11 @@ class WeatherReading
 			hashed[kv[0].strip] = kv[1].strip
 		end
 
-		return WeatherReading.new(hashed["Temperature"].to_f, hashed["Humidity"].to_f)		
+		temperature = hashed["Temperature"].to_f
+		humidity = hashed["Humidity"].to_f
+		humidity = 100.0 if humidity > 100.0
+
+		return WeatherReading.new(temperature, humidity)		
 	end
 
 	attr_reader :temperature, :humidity, :dewpoint
@@ -73,7 +77,6 @@ class WeatherReading
 		@humidity = humidity
 		@dewpoint = Temperature.new(calculate_dewpoint(temp, humidity))
 	end
-
 
 private
 	

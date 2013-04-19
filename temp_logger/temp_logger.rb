@@ -5,8 +5,6 @@ require 'net/http'
 require './lib/weather_reading'
 require './lib/wunderground_logger'
 
-Upload_Url = "http://rtupdate.wunderground.com/weatherstation/updateweatherstation.php"
-
 Mail.defaults do
 	delivery_method :smtp, { 
 		:address => 'smtp.gmail.com',
