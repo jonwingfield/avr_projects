@@ -8,6 +8,7 @@
 #include "dbg.h"
 #include "lcd.h"
 #include "weather_info.h"
+#include "rht03.h"
 #include "ds18b20.h"
 
 #define BAUD 9600
@@ -64,7 +65,7 @@ uint16_t calc_capacitance(uint16_t ticks)
     // return (uint16_t)((double)ticks / (1.6 * .98));
 }
 
-#define PERCENT_HUMIDITY_PER_DEG_C  2.7
+#define PERCENT_HUMIDITY_PER_DEG_C  1.1  // was 2.7
 
 // returns humidity in %RH * 10 (for precision)
 uint16_t calc_humidity(double pf_times_10, uint16_t temp_c_times_10)
@@ -256,13 +257,19 @@ int main (void)
             }
 
             uint16_t analog_temp = calc_temp();
-            uint16_t temp = get_temp_ds18b20();
-            
+            // uint16_t temp = get_temp_ds18b20();
+            temp_humidity_info temp_and_humidity;
+            if (!rht03_temp_and_humidity(&temp_and_humidity))
+            {
+                lcd_print("Error!", 1);
+                _delay_ms(1000);
+            }
+            uint16_t temp = temp_and_humidity.temp;
+
             uint16_t avg_reading = 0;
             for (int i=0; i<NUM_READINGS; i++) avg_reading += readings[i];
             double avg_double = (double)avg_reading / (NUM_READINGS * 2);
-
-            uint16_t humidity = calc_humidity(avg_double, temp);
+            uint16_t humidity = temp_and_humidity.humidity;//calc_humidity(avg_double, temp);
 
             // sanity check values
             // if (humidity < 10 || humidity > 1000 || temp > 500) {

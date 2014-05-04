@@ -43,7 +43,7 @@
 MCU = atmega328p
 
 # IP address of the raspberry pi to use as a programmer
-RASPBERRY_PI_ADDR = 192.168.1.103
+RASPBERRY_PI_ADDR = 192.168.1.102
 
 # Processor frequency.
 #     This will define a symbol, F_CPU, in all source code files equal to the 
@@ -62,7 +62,7 @@ TARGET = temp_humidity
 
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = $(TARGET).c lcd.c ds18b20.c VirtualWire/VirtualWire.c
+SRC = $(TARGET).c lcd.c ds18b20.c rht03.c VirtualWire/VirtualWire.c
 
 
 # List Assembler source files here.
@@ -222,7 +222,7 @@ AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 # to submit bug reports.
 # AVRDUDE_VERBOSE = -v -v
 
-AVRDUDE_FLAGS = -p $(MCU) -c $(AVRDUDE_PROGRAMMER) -B 1
+AVRDUDE_FLAGS = -p $(MCU) -c $(AVRDUDE_PROGRAMMER) -B 1 -F
 AVRDUDE_FLAGS += $(AVRDUDE_NO_VERIFY)
 AVRDUDE_FLAGS += $(AVRDUDE_VERBOSE)
 AVRDUDE_FLAGS += $(AVRDUDE_ERASE_COUNTER)
@@ -318,7 +318,7 @@ ALL_ASFLAGS = -mmcu=$(MCU) -I. -x assembler-with-cpp $(ASFLAGS)
 # Default target.
 all: begin gccversion sizebefore build sizeafter end
 
-build: lcd.o ds18b20.o elf hex eep lss sym
+build: lcd.o ds18b20.o rht03.o elf hex eep lss sym
 
 elf: $(TARGET).elf
 hex: $(TARGET).hex
