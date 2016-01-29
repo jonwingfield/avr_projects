@@ -1,4 +1,3 @@
-require 'weather_reading'
 require 'date'
 
 class HistoryRecord

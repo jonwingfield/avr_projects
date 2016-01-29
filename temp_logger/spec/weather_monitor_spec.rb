@@ -1,4 +1,4 @@
-require 'weather_monitors'
+require_relative '../app'
 
 shared_examples "A Monitor" do
 	let(:fake_clock) { double("fake") }
@@ -35,7 +35,7 @@ describe 'Temperature Range Monitor' do
 	let(:notification) { double("notification") }
 
 	let(:monitor) do 
-		monitor = TemperatureRangeMonitor.new(:max_variation => 9)
+		monitor = Monitors::TemperatureRangeMonitor.new(:max_variation => 9)
 		monitor.when_range_exceeded(notification)
 		monitor
 	end
@@ -72,7 +72,7 @@ end
 describe 'Temperature Extreme Monitor' do
 	let(:notification) { double("notification") }
 	let(:monitor) do 
-		monitor = TemperatureExtremeMonitor.new(:max => 32, :min => 20)
+		monitor = Monitors::TemperatureExtremeMonitor.new(:max => 32, :min => 20)
 		monitor.when_extreme_exceeded(notification)
 		monitor
 	end

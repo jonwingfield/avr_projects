@@ -34,7 +34,7 @@ describe Temperature do
 			Temperature.new("77.0f").should < Temperature.new("25.1C")
 		end
 
-		it "=" do
+		it "==" do
 			Temperature.new("25.0c").should == Temperature.new("77.0F")
 		end
 	end

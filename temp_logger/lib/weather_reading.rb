@@ -64,6 +64,7 @@ class WeatherReading
 		end
 
 		temperature = hashed["Temperature"].to_f
+                temperature = 45.0 if temperature > 45.0
 		humidity = hashed["Humidity"].to_f
 		humidity = 100.0 if humidity > 100.0
 

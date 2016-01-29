@@ -1,4 +1,4 @@
-require 'email_notifier'
+require_relative '../lib/email_notifier'
 
 describe "Email Notification" do
 	include Mail::Matchers
@@ -14,12 +14,12 @@ describe "Email Notification" do
 		it { should have_sent_email.from("weather_monitor@test.com")}
 	end
 
-	context "Warning emails" do
-		before(:each) do
-			notifier = EmailNotifier.new(:to => "wingfield.jon@gmail.com", :level => "WARNING")
-			notifier.notify("This is a test email")			
-		end
+	# context "Warning emails" do
+	# 	before(:each) do
+	# 		notifier = EmailNotifier.new(:to => "wingfield.jon@gmail.com", :level => "WARNING")
+	# 		notifier.notify("This is a test email")			
+	# 	end
 
-		it { should have_sent_email.with_subject('WARNING: This is a test email') }
-	end
+	# 	it { should have_sent_email.with_subject('WARNING: This is a test email') }
+	# end
 end
